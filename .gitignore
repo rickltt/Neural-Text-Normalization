@@ -1,0 +1,10 @@
+cache/
+output/
+models/
+data/
+dataset/
+cpp/onnxruntime-linux-x64-1.19.0/
+cpp/sentencepiece-0.2.0
+cpp/onnx
+cpp/build
+*.zip
