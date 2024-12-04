@@ -1,4 +1,4 @@
-export CUDA_VISIBLE_DEVICES=3
+export CUDA_VISIBLE_DEVICES=4
 export NCCL_P2P_DISABLE=1
 export NCCL_IB_DISABLE=1
 
@@ -7,12 +7,12 @@ python tagger_ft.py \
         --do_train \
         --do_eval \
         --do_predict \
-        --output_dir tagger_output \
+        --output_dir output/tagger_output \
         --model_name_or_path ./models/electra-small-discriminator \
-        --cache_dir tagger_cache \
-        --train_file data/train.json \
-        --eval_file data/dev.json \
-        --test_file data/test.json \
+        --cache_dir cache/tagger_cache \
+        --train_file dataset/train_tagger.json \
+        --eval_file dataset/dev_tagger.json \
+        --test_file dataset/test_tagger.json \
         --num_proc 8 \
         --max_seq_length 512 \
         --num_train_epochs 10 \

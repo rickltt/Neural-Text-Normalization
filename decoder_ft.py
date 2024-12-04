@@ -19,9 +19,6 @@ Fine-tuning a 🤗 Transformers model on summarization.
 # You can also adapt this script on your own summarization task. Pointers for this are left as comments.
 
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
-# os.environ["NCCL_P2P_DISABLE"] ="1"
-# os.environ["NCCL_IB_DISABLE"] ="1"
 
 import argparse
 import json
@@ -42,7 +39,6 @@ from transformers import (
 
 import datasets
 import evaluate
-import nltk
 import numpy as np
 import torch
 from datasets import load_dataset
@@ -60,8 +56,11 @@ def main():
 
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a summarization task")
 
-    parser.add_argument('--data_dir', default='dataset', type=str, help=" A directory containing the training, validation and testing data.")
-    parser.add_argument('--data_cache_dir', default='t5_cache_dir', type=str)
+    parser.add_argument('--train_file', default=None, type=str)
+    parser.add_argument('--eval_file', default=None, type=str)
+    parser.add_argument('--test_file', default=None, type=str)
+    
+    parser.add_argument('--cache_dir', default=None, type=str)
     
     parser.add_argument(
         "--ignore_pad_token_for_loss",
@@ -80,7 +79,7 @@ def main():
     )
 
     parser.add_argument(
-        "--preprocessing_num_workers",
+        "--num_proc",
         type=int,
         default=None,
         help="The number of processes to use for the preprocessing.",
@@ -108,14 +107,9 @@ def main():
             "passed to ``model.generate``, which is used during ``evaluate`` and ``predict``."
         ),
     )
-    # parser.add_argument(
-    #     "--pad_to_max_length",
-    #     action="store_true",
-    #     help="If passed, pad all samples to `max_length`. Otherwise, dynamic padding is used.",
-    # )
     parser.add_argument(
         "--model_name_or_path",
-        default="./models/t5-small",
+        default=None,
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
         required=False,
@@ -173,12 +167,6 @@ def main():
         default=None,
         help="Whether the various states should be saved at the end of every n steps, or 'epoch' for each epoch.",
     )
-    # parser.add_argument(
-    #     "--resume_from_checkpoint",
-    #     type=str,
-    #     default=None,
-    #     help="If the training should continue from a checkpoint folder.",
-    # )
     parser.add_argument(
         "--with_tracking",
         action="store_true",
@@ -219,34 +207,31 @@ def main():
         
     # Handle the repository creation
     if accelerator.is_main_process:
-        # if args.push_to_hub:
-        #     # Retrieve of infer repo_name
-        #     repo_name = args.hub_model_id
-        #     if repo_name is None:
-        #         repo_name = Path(args.output_dir).absolute().name
-        #     # Create repo and retrieve repo_id
-        #     api = HfApi()
-        #     repo_id = api.create_repo(repo_name, exist_ok=True, token=args.hub_token).repo_id
-
-        #     with open(os.path.join(args.output_dir, ".gitignore"), "w+") as gitignore:
-        #         if "step_*" not in gitignore:
-        #             gitignore.write("step_*\n")
-        #         if "epoch_*" not in gitignore:
-        #             gitignore.write("epoch_*\n")
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
     accelerator.wait_for_everyone()
 
     data_files = {}
-    data_files["train"] = os.path.join(args.data_dir,'train_decoder.csv')
-    data_files["dev"] = os.path.join(args.data_dir,'dev_decoder.csv')
-    data_files["test"] = os.path.join(args.data_dir,'test_decoder.csv')
+    if args.train_file is not None:
+        data_files["train"] = args.train_file
+        extension = args.train_file.split(".")[-1]
+    if args.eval_file is not None:
+        data_files["eval"] = args.eval_file
+        extension = args.eval_file.split(".")[-1]
+    if args.test_file is not None:
+        data_files["test"] = args.test_file
+        extension = args.test_file.split(".")[-1]
+        
+    # data_files = {}
+    # data_files["train"] = os.path.join(args.data_dir,'train_decoder.csv')
+    # data_files["dev"] = os.path.join(args.data_dir,'dev_decoder.csv')
+    # data_files["test"] = os.path.join(args.data_dir,'test_decoder.csv')
     
     raw_datasets = load_dataset(
-        "csv",
+        extension,
         data_files=data_files,
-        cache_dir=args.data_cache_dir,
-        num_proc = args.preprocessing_num_workers
+        cache_dir=args.cache_dir,
+        num_proc = args.num_proc
     )
 
     model = T5ForConditionalGeneration.from_pretrained(args.model_name_or_path, use_safetensors=False)
@@ -259,29 +244,7 @@ def main():
             "src": [],
             "tgt": []
         }
-        
-        # for example in examples["text"]:
-        #     line =  example.split("\t")
-            
-        #     if len(line) == 2:
-        #         continue
 
-        #     if line[-1] == "<self>":
-        #         continue
-            
-        #     cls, s, t = line
-            
-        #     prefix = f"Normalize {cls}: \n"
-        #     model_inputs["src"].append(prefix + s)
-        #     model_inputs["tgt"].append(t)
-        # for token, tag, decode in zip(examples["tokens"], examples["tags"], examples["decodes"]):
-        #     if decode not in ["<self>","sil"]:
-        #         prefix = f"normalize {tag}: "
-        #         src = prefix + token
-        #         tgt = decode
-        #         if src not in model_inputs["src"]:
-        #             model_inputs["src"].append(src)
-        #             model_inputs["tgt"].append(tgt)
         tag = examples["Semiotic Class"].lower()
         prefix = f"normalize {tag}: "
         src = prefix + examples["Input Token"]
@@ -292,26 +255,19 @@ def main():
 
     raw_datasets = raw_datasets.map(split_into_sequence,
                                     batch_size=None,
-                                    # remove_columns=["sentence","tokens","tags","decodes","labels"],
                                     remove_columns=["Semiotic Class","Input Token","Output Token"],
                                     load_from_cache_file=not args.overwrite_cache,
                                     num_proc=args.preprocessing_num_workers,
                                    )
         
-    # raw_datasets["train"] = raw_datasets["train"].select(range(1000))
-    # raw_datasets["dev"] = raw_datasets["dev"].select(range(200))
-    # raw_datasets["test"] = raw_datasets["test"].select(range(200))
+    raw_datasets["train"] = raw_datasets["train"].select(range(1000))
+    raw_datasets["dev"] = raw_datasets["dev"].select(range(200))
+    raw_datasets["test"] = raw_datasets["test"].select(range(200))
 
-    # Temporarily set max_target_length for training.
-    # max_target_length = args.max_target_length
-    # padding = "max_length" if args.pad_to_max_length else False
-    
     def preprocess(examples):
 
         source_text = [ s for src in examples["src"] for s in src ]
         target_text = [ t for tgt in examples["tgt"] for t in tgt ]
-        # model_inputs = tokenizer(examples["src"])
-        # labels = tokenizer(examples["tgt"])
         
         model_inputs = tokenizer(source_text,
                                     padding="max_length",
@@ -322,9 +278,6 @@ def main():
                                     truncation=True,
                                     max_length=args.max_target_length)
 
-        # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
-        # padding in the loss.
-        # if padding == "max_length":
         labels["input_ids"] = [
                 [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
             ]
@@ -365,16 +318,6 @@ def main():
         label_pad_token_id=label_pad_token_id,
         pad_to_multiple_of=pad_to_multiple_of,
     )
-
-    def postprocess_text(preds, labels):
-        preds = [pred.strip() for pred in preds]
-        labels = [label.strip() for label in labels]
-
-        # rougeLSum expects newline after each sentence
-        preds = ["\n".join(nltk.sent_tokenize(pred)) for pred in preds]
-        labels = ["\n".join(nltk.sent_tokenize(label)) for label in labels]
-
-        return preds, labels
     
 
     train_dataloader = DataLoader(
@@ -456,34 +399,6 @@ def main():
     completed_steps = 0
     starting_epoch = 0
     best_acc = 0.0
-    # Potentially load in the weights and states from a previous save
-    # if args.resume_from_checkpoint:
-    #     if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
-    #         checkpoint_path = args.resume_from_checkpoint
-    #         path = os.path.basename(args.resume_from_checkpoint)
-    #     else:
-    #         # Get the most recent checkpoint
-    #         dirs = [f.name for f in os.scandir(os.getcwd()) if f.is_dir()]
-    #         dirs.sort(key=os.path.getctime)
-    #         path = dirs[-1]  # Sorts folders by date modified, most recent checkpoint is the last
-    #         checkpoint_path = path
-    #         path = os.path.basename(checkpoint_path)
-
-    #     accelerator.print(f"Resumed from checkpoint: {checkpoint_path}")
-    #     accelerator.load_state(checkpoint_path)
-    #     # Extract `epoch_{i}` or `step_{i}`
-    #     training_difference = os.path.splitext(path)[0]
-
-    #     if "epoch" in training_difference:
-    #         starting_epoch = int(training_difference.replace("epoch_", "")) + 1
-    #         resume_step = None
-    #         completed_steps = starting_epoch * num_update_steps_per_epoch
-    #     else:
-    #         # need to multiply `gradient_accumulation_steps` to reflect real steps
-    #         resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
-    #         starting_epoch = resume_step // len(train_dataloader)
-    #         completed_steps = resume_step // args.gradient_accumulation_steps
-    #         resume_step -= starting_epoch * len(train_dataloader)
 
     # update the progress_bar if load from checkpoint
     progress_bar.update(completed_steps)
@@ -492,13 +407,8 @@ def main():
         model.train()
         if args.with_tracking:
             total_loss = 0
-        # if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
-        #     # We skip the first `n` batches in the dataloader when resuming from a checkpoint
-        #     active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
-        # else:
-        #     active_dataloader = train_dataloader
 
-        for step, batch in enumerate(train_dataloader):
+        for batch in train_dataloader:
             with accelerator.accumulate(model):
                 outputs = model(**batch)
                 loss = outputs.loss
@@ -542,9 +452,6 @@ def main():
                     generated_tokens, dim=1, pad_index=tokenizer.pad_token_id
                 )
                 labels = batch["labels"]
-                # if not args.pad_to_max_length:
-                #     # If we did not pad to max length, we need to pad the labels too
-                #     labels = accelerator.pad_across_processes(batch["labels"], dim=1, pad_index=tokenizer.pad_token_id)
 
                 generated_tokens, labels = accelerator.gather_for_metrics((generated_tokens, labels))
                 generated_tokens = generated_tokens.cpu().numpy()
@@ -563,18 +470,10 @@ def main():
                 for idx, (pred,label) in enumerate(zip(decoded_preds, decoded_labels)):
                     if pred == label:
                         predicted_labels[idx] = 1
-                # print("decoded_preds:", decoded_preds[:10])
-                # print("decoded_labels:", decoded_labels[:10])
-                # decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-                # metric.add_batch(
-                #     predictions=decoded_preds,
-                #     references=decoded_labels,
-                # )
                 metric.add_batch(
                     predictions=predicted_labels,
                     references=true_labels,
                 )
-        # result = metric.compute(use_stemmer=True)
         result = metric.compute()
         result = {k: round(v * 100, 4) for k, v in result.items()}
 
@@ -590,22 +489,6 @@ def main():
             result["step"] = completed_steps
             accelerator.log(result, step=completed_steps)
 
-        # if args.push_to_hub and epoch < args.num_train_epochs - 1:
-        #     accelerator.wait_for_everyone()
-        #     unwrapped_model = accelerator.unwrap_model(model)
-        #     unwrapped_model.save_pretrained(
-        #         args.output_dir, is_main_process=accelerator.is_main_process, save_function=accelerator.save
-        #     )
-        #     if accelerator.is_main_process:
-        #         tokenizer.save_pretrained(args.output_dir)
-                # api.upload_folder(
-                #     commit_message=f"Training in progress epoch {epoch}",
-                #     folder_path=args.output_dir,
-                #     repo_id=repo_id,
-                #     repo_type="model",
-                #     token=args.hub_token,
-                # )
-
         if args.checkpointing_steps == "epoch":
             output_dir = f"epoch_{epoch}"
             if args.output_dir is not None:
@@ -620,15 +503,6 @@ def main():
         )
         if accelerator.is_main_process:
             tokenizer.save_pretrained(args.output_dir)
-            # if args.push_to_hub:
-            #     api.upload_folder(
-            #         commit_message="End of training",
-            #         folder_path=args.output_dir,
-            #         repo_id=repo_id,
-            #         repo_type="model",
-            #         token=args.hub_token,
-            #     )
-
             all_results = {f"eval_{k}": v for k, v in result.items()}
             with open(os.path.join(args.output_dir, "all_results.json"), "w") as f:
                 json.dump(all_results, f)

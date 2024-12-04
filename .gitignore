@@ -8,3 +8,4 @@ cpp/sentencepiece-0.2.0
 cpp/onnx
 cpp/build
 *.zip
+*.ipynb

@@ -1,8 +1,4 @@
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "2"
-# os.environ["NCCL_P2P_DISABLE"] ="1"
-# os.environ["NCCL_IB_DISABLE"] ="1"
-
 import logging
 import sys
 from dataclasses import dataclass, field
@@ -27,7 +23,7 @@ from seqeval.metrics import precision_score, recall_score, f1_score, classificat
 logger = logging.getLogger(__name__)
 
 # 'DATE', 'CARDINAL', 'DECIMAL','MEASURE', 'MONEY', 'ORDINAL', 'TIME', 'DIGIT', 'FRACTION', 'TELEPHONE', 'ADDRESS'
-label_list = ['DATE', 'CARDINAL', 'DECIMAL','MEASURE', 'MONEY', 'ORDINAL', 'TIME', 'DIGIT', 'FRACTION', 'TELEPHONE', 'ADDRESS']
+label_list = ['DATE', 'LETTERS', 'CARDINAL', 'DECIMAL','MEASURE', 'VERBATIM', 'MONEY', 'ORDINAL', 'TIME', 'DIGIT', 'ELECTRONIC', 'FRACTION', 'TELEPHONE', 'ADDRESS']
 bio_label_list = ["O"]
 for l in label_list:
     bio_label_list.append(f"B-{l}")
