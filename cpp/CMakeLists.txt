@@ -15,14 +15,18 @@ find_package(glog 0.7.1 REQUIRED)
 
 include_directories(include)
 
-add_library(text_norm SHARED src/wordpiece.cpp src/utils.cpp src/tagger.cpp src/decoder.cpp src/processor.cpp)
+FILE(GLOB_RECURSE SOURCE_FILES ${CMAKE_SOURCE_DIR}/src/*.cpp)
+
+SET(ALL_SRCS ${SOURCE_FILES})
+
+add_library(text_norm SHARED ${ALL_SRCS})
 target_link_libraries(text_norm PUBLIC sentencepiece onnxruntime glog::glog)
 
-add_executable(debug src/debug.cpp)
+add_executable(debug debug.cpp)
 
 target_link_libraries(debug text_norm)
 
 
-add_executable(tokenizer src/debug_tokenizer.cpp)
+add_executable(tokenizer debug_tokenizer.cpp)
 
 target_link_libraries(tokenizer text_norm)

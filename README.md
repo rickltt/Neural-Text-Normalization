@@ -47,3 +47,41 @@ chmod +x ./scripts/run_tagger.sh
 chmod +x ./scripts/run_decoder.sh
 ./scripts/run_decoder.sh
 ```
+
+## 模型导出和量化
+
+```shell
+
+# 模型导出
+optimum-cli export onnx --model ./output/tagger_output --task token-classification ./cpp/onnx/tagger_onnx
+
+optimum-cli export onnx --model ./output/decoder_output --task text2text-generation-with-past --no-post-process ./cpp/onnx/tagger_onnx
+
+#量化
+python quant.py
+
+```
+
+## C++ 运行
+
+```shell
+cd cpp
+mkdir build
+cd build
+cmake 
+make
+./debug
+```
+
+Output：
+
+```
+result: {
+    "details": {
+        "$22m": "twenty two million dollars",
+        "june 2011": "june twenty eleven"
+    },
+    "input": "In June 2011, Liquid Robotics received $22M investor funding from VantagePoint Capital Partners and Schlumberger, ltd.",
+    "output": "In june twenty eleven, Liquid Robotics received twenty two million dollars investor funding from VantagePoint Capital Partners and Schlumberger, ltd."
+}
+```

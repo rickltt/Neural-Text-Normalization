@@ -14,8 +14,8 @@ def quantize(model_path, model_name):
     os.remove(model_fp32)
 
 if __name__ == '__main__':
-    quantize("./tagger_onnx","model")
-    quantize("./decoder_onnx","encoder_model")
-    quantize("./decoder_onnx","decoder_model")
-    quantize("./decoder_onnx","decoder_with_past_model")
+    quantize("./cpp/onnx/tagger_onnx","model")
+    quantize("./cpp/onnx/decoder_onnx","encoder_model")
+    quantize("./cpp/onnx/decoder_onnx","decoder_model")
+    quantize("./cpp/onnx/decoder_onnx","decoder_with_past_model")
 
